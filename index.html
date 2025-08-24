@@ -1,0 +1,273 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Touch Canvas UI</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            /* border: 1px solid grey; */
+            /* debug */
+        }
+
+        html,
+        body {
+            background-color: grey;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            user-select: none;
+        }
+
+        .full-screen {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="full-screen">
+        <canvas></canvas>
+    </div>
+    <script>
+
+        ///////////////////////////////////////////////////////////////////////
+
+        const fullscreenDiv = document.querySelector('div.full-screen')
+        const canvas = document.querySelector('canvas')
+
+        const width = fullscreenDiv.offsetWidth
+        const height = fullscreenDiv.offsetHeight
+
+        canvas.width = width
+        canvas.height = height
+
+        let touchesTargets = []
+
+        ctx = canvas.getContext('2d')
+
+        ///////////////////////////////////////////////////////////////////////
+
+        const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y })
+
+        const dist = (a, b) =>
+            Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
+
+        const length = ({ x, y }) => Math.sqrt(x * x + y * y)
+
+        const normal = ({ x, y }) => {
+            const len = length({ x, y })
+            return {
+                x: x / len,
+                y: y / len
+            }
+        }
+
+        const scale = (vector, magintude) => ({
+            x: vector.x * magintude,
+            y: vector.y * magintude
+        })
+
+        const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y })
+
+        ///////////////////////////////////////////////////////////////////////
+
+        const analog = (() => {
+
+            ///////////////////////////////////////////////////////////////////
+
+            const center = {
+                x: 95,
+                y: height - 95
+            }
+            const innerRadius = 30
+            const outerRadius = 70
+
+            maxStickDist = outerRadius - innerRadius
+
+            let idle = true
+
+            let stickX = center.x
+            let stickY = center.y
+
+            ///////////////////////////////////////////////////////////////////
+
+            const contact = (contactPoint) => {
+                return dist(
+                    contactPoint,
+                    { x: center.x, y: center.y }
+                ) < outerRadius
+            }
+
+            const draw = (context) => {
+
+                ctx.strokeStyle = "white"
+                ctx.globalAlpha = idle ? 0.5 : 1
+
+                ctx.beginPath()
+                ctx.arc(
+                    center.x,
+                    center.y,
+                    outerRadius,
+                    0,
+                    Math.PI * 2,
+                    false
+                )
+                ctx.stroke()
+                ctx.closePath()
+
+                ctx.globalAlpha = idle ? 1 : 0.5
+
+                ctx.beginPath()
+                ctx.arc(
+                    stickX,
+                    stickY,
+                    innerRadius,
+                    0,
+                    Math.PI * 2,
+                    false
+                )
+                ctx.stroke()
+                ctx.closePath()
+            }
+
+            const input = (contactPoint) => {
+                
+                idle = false
+
+                const stickVector = sub(contactPoint, center)
+                const stickDist = length(stickVector)
+
+                const stickNormal = normal(stickVector)
+                const stickScaled = scale(stickNormal, maxStickDist)
+                const stickClamped = add(stickScaled, center)
+
+                if (stickDist > maxStickDist) {
+                    stickX = stickClamped.x
+                    stickY = stickClamped.y
+                }
+                else {
+                    stickX = contactPoint.x
+                    stickY = contactPoint.y
+                }
+            }
+
+            const release = () => {
+                idle = true
+                stickX = center.x
+                stickY = center.y
+            }
+
+            ///////////////////////////////////////////////////////////////////
+
+            return {
+                contact,
+                draw,
+                input,
+                release
+            }
+
+        })()
+
+        ///////////////////////////////////////////////////////////////////////
+
+        const startDrag = (event, target) => {
+
+            const touch = event.changedTouches[0]
+
+            if (touchesTargets.length === 0) {
+                canvas.addEventListener("touchmove", drag)
+                canvas.addEventListener("touchend", endDrag)
+            }
+
+            touchesTargets.push({
+                target,
+                touchIdentifier: touch.identifier,
+            })
+
+            target.input({ x: touch.clientX, y: touch.clientY })
+        }
+
+        const drag = (event) => {
+
+            event.preventDefault()
+
+                ;[...event.changedTouches].forEach(touch => {
+                    const touchTarget = touchesTargets.find(
+                        (tt) => tt.touchIdentifier === touch.identifier
+                    )
+
+                    const target = touchTarget.target
+
+                    target.input({ x: touch.clientX, y: touch.clientY })
+                })
+        }
+
+        const endDrag = (event) => {
+
+            const endingTouchIdentifiers =
+                [...event.changedTouches].map(t => t.identifier)
+
+            endingTouchIdentifiers.forEach((touchIdentifier) => {
+                const touchTarget = touchesTargets.find(
+                    (tt) => tt.touchIdentifier === touchIdentifier
+                )
+                touchTarget.target.release()
+            })
+
+            touchesTargets =
+                touchesTargets
+                    .filter(tt =>
+                        !endingTouchIdentifiers
+                            .some(eti => eti === tt.touchIdentifier)
+                    )
+
+            if (touchesTargets.length === 0) {
+                canvas.removeEventListener('touchmove', drag)
+                canvas.removeEventListener('touchend', endDrag)
+            }
+
+        }
+
+        canvas.addEventListener('touchstart', (event) => {
+
+            event.preventDefault()
+
+            const x = event.touches[0].clientX
+            const y = event.touches[0].clientY
+
+            if (analog.contact({ x, y })) {
+                startDrag(event, analog)
+            }
+
+        })
+
+        ///////////////////////////////////////////////////////////////////////
+
+        function animateUi() {
+
+            ctx.clearRect(0, 0, canvas.width, canvas.height)
+            
+            ///////////////////////////////////////////////////////////////////
+            
+            analog.draw(ctx)
+            
+            ///////////////////////////////////////////////////////////////////
+            
+            requestAnimationFrame(animateUi)
+        }
+
+        ///////////////////////////////////////////////////////////////////////
+
+        animateUi()
+
+        ///////////////////////////////////////////////////////////////////////
+    </script>
+</body>
+
+</html>
