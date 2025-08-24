@@ -98,10 +98,7 @@
             ///////////////////////////////////////////////////////////////////
 
             const contact = (contactPoint) => {
-                return dist(
-                    contactPoint,
-                    { x: center.x, y: center.y }
-                ) < outerRadius
+                return dist( contactPoint, center ) < outerRadius
             }
 
             const draw = (context) => {
