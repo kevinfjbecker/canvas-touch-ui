@@ -4,37 +4,40 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Touch Canvas UI</title>
-    <style>
-        * {
-            margin: 0;
-            padding: 0;
-            box-sizing: border-box;
-            /* border: 1px solid grey; */
-            /* debug */
-        }
-
-        html,
-        body {
-            background-color: grey;
-            width: 100%;
-            height: 100%;
-            overflow: hidden;
-            user-select: none;
-        }
-
-        .full-screen {
-            width: 100%;
-            height: 100%;
-        }
-    </style>
+    <title>Controller</title>
+    <link rel="stylesheet" href="style.css">
 </head>
 
 <body>
+    <!--
+    todo:
+      [x] get css up
+      [x] just to draw them
+        [x] the analog on
+        [x] get the button on
+        [x] try modular script
+      [x] get interactivity
+        [x] analog
+        [x] button
+      [x] multitouch
+        [x] uninfy touch handlers
+        [x] encapsulate touch handlers
+        [ ] generalize touch handlers
+        [ ] dispose of touch handlers
+    bugs:
+      [ ] reposition on resize
+      [x] paint spill (button color on analog touch)
+     -->
+
     <div class="full-screen">
         <canvas></canvas>
     </div>
-    <script>
+
+    <script type="module">
+
+        import { analog } from './js/analog.js'
+        import { button } from './js/button.js'
+        import TouchController from './js/touch.js'
 
         ///////////////////////////////////////////////////////////////////////
 
@@ -47,202 +50,33 @@
         canvas.width = width
         canvas.height = height
 
-        let touchesTargets = []
-
-        ctx = canvas.getContext('2d')
+        const ctx = canvas.getContext('2d')
 
         ///////////////////////////////////////////////////////////////////////
 
-        const add = (a, b) => ({ x: a.x + b.x, y: a.y + b.y })
-
-        const dist = (a, b) =>
-            Math.sqrt((a.x - b.x) ** 2 + (a.y - b.y) ** 2)
-
-        const length = ({ x, y }) => Math.sqrt(x * x + y * y)
-
-        const normal = ({ x, y }) => {
-            const len = length({ x, y })
-            return {
-                x: x / len,
-                y: y / len
-            }
+        const analogCenter = {
+            x: 95,
+            y: height - 95
         }
 
-        const scale = (vector, magintude) => ({
-            x: vector.x * magintude,
-            y: vector.y * magintude
-        })
-
-        const sub = (a, b) => ({ x: a.x - b.x, y: a.y - b.y })
+        const analogControl = analog(analogCenter)
 
         ///////////////////////////////////////////////////////////////////////
 
-        const button = (() => {
-
-            ///////////////////////////////////////////////////////////////////
-
-            const center = {
-                x: width / 2,
-                y: height / 2
-            }
-
-            const buttonWidth = 120
-            const buttonHeight = 60
-            const buttonRadii = [10]
-            const buttonX = center.x - buttonWidth / 2
-            const buttonY = center.y - buttonHeight / 2
-
-            let idle = true
-
-            ///////////////////////////////////////////////////////////////////
-
-            const contact = (contactPoint) => {
-                return (
-                    contactPoint.x < buttonX + buttonWidth &&
-                    contactPoint.x > buttonX &&
-                    contactPoint.y < buttonY + buttonHeight &&
-                    contactPoint.y > buttonY
-                )
-            }
-
-            const draw = (context) => {
-
-                if (idle) {
-
-                    ctx.strokeStyle = 'white'
-                    ctx.fillStyle = 'grey'
-                    ctx.lineWidth = 3
-
-                    ctx.shadowColor = 'white'
-                    ctx.shadowOffsetX = 4
-                    ctx.shadowOffsetY = 4
-
-                    ctx.beginPath()
-                    ctx.roundRect(
-                        buttonX,
-                        buttonY,
-                        buttonWidth,
-                        buttonHeight,
-                        buttonRadii
-                    )
-                    ctx.stroke()
-                    ctx.fill()
-                    ctx.closePath()
-
-                    ctx.shadowColor = 'rgba(0, 0, 0, 0)';
-                    ctx.shadowBlur = 0;
-                    ctx.shadowOffsetX = 0;
-                    ctx.shadowOffsetY = 0;
-
-                    ctx.fillStyle = 'white'
-                    ctx.font = '32px sans-serif'
-                    ctx.textAlign = 'center'
-                    ctx.textBaseline = 'middle'
-                    ctx.fillText('Start', canvas.width / 2, canvas.height / 2 + 3)
-
-                } else {
-
-                    ctx.strokeStyle = 'white'
-                    ctx.fillStyle = 'white'
-                    ctx.lineWidth = 3
-
-                    ctx.shadowColor = 'rgba(0, 0, 0, 0)';
-                    ctx.shadowBlur = 0;
-                    ctx.shadowOffsetX = 0;
-                    ctx.shadowOffsetY = 0;
-
-                    ctx.beginPath()
-                    ctx.roundRect(
-                        buttonX,
-                        buttonY + 4,
-                        buttonWidth,
-                        buttonHeight,
-                        buttonRadii
-                    )
-                    ctx.stroke()
-                    ctx.fill()
-                    ctx.closePath()
-
-                    ctx.fillStyle = 'grey'
-                    ctx.font = '32px sans-serif'
-                    ctx.textAlign = 'center'
-                    ctx.textBaseline = 'middle'
-                    ctx.fillText('Start', canvas.width / 2, canvas.height / 2 + 3 + 4)
-
-                }
-
-            }
-
-            const input = (contactPoint) => {
-                idle = false
-            }
-
-            const release = () => {
-                idle = true
-            }
-
-            ///////////////////////////////////////////////////////////////////
-
-            return {
-                contact,
-                draw,
-                input,
-                release
-            }
-
-        })()
-
-        ///////////////////////////////////////////////////////////////////////
-
-        const buttonUp = (event) => {
-
-            const endingTouchIdentifiers =
-                [...event.changedTouches].map(t => t.identifier)
-
-            endingTouchIdentifiers.forEach((touchIdentifier) => {
-                const touchTarget = touchesTargets.find(
-                    (tt) => tt.touchIdentifier === touchIdentifier
-                )
-                touchTarget.target.release()
-            })
-
-            touchesTargets =
-                touchesTargets
-                    .filter(tt =>
-                        !endingTouchIdentifiers
-                            .some(eti => eti === tt.touchIdentifier)
-                    )
-
-            if (touchesTargets.length === 0) {
-                canvas.removeEventListener('touchend', buttonUp)
-            }
-
+        const butonCenter = {
+            x: width / 2,
+            y: height / 2
         }
 
-        canvas.addEventListener('touchstart', (event) => {
+        const buttonControl = button(butonCenter)
 
-            event.preventDefault()
+        ///////////////////////////////////////////////////////////////////////
 
-            const touch = event.changedTouches[0]
-
-            const x = event.touches[0].clientX
-            const y = event.touches[0].clientY
-
-            if (button.contact({ x, y })) {
-
-                if (touchesTargets.length === 0) {
-                    canvas.addEventListener("touchend", buttonUp)
-                }
-                touchesTargets.push({
-                    target: button,
-                    touchIdentifier: touch.identifier,
-                })
-
-                button.input({ x, y })
-
-            }
-
-        })
+        const touchController = new TouchController(
+            canvas,
+            analogControl,
+            buttonControl
+        )
 
         ///////////////////////////////////////////////////////////////////////
 
@@ -252,7 +86,8 @@
 
             ///////////////////////////////////////////////////////////////////
 
-            button.draw(ctx)
+            buttonControl.draw(ctx)
+            analogControl.draw(ctx)
 
             ///////////////////////////////////////////////////////////////////
 
@@ -265,6 +100,7 @@
 
         ///////////////////////////////////////////////////////////////////////
     </script>
+
 </body>
 
 </html>
